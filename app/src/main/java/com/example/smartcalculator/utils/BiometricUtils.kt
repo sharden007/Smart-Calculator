@@ -7,20 +7,19 @@ import androidx.fragment.app.FragmentActivity
 
 class BiometricUtils(private val activity: FragmentActivity) {
 
-    fun isBiometricAvailable(): Boolean {
+    fun isPinAvailable(): Boolean {
         val biometricManager = BiometricManager.from(activity)
         return when (biometricManager.canAuthenticate(
-            BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            BiometricManager.Authenticators.DEVICE_CREDENTIAL
         )) {
             BiometricManager.BIOMETRIC_SUCCESS -> true
             else -> false
         }
     }
 
-    fun authenticate(
-        title: String = "Biometric Authentication",
-        subtitle: String = "Authenticate to access your private files",
+    fun authenticateWithPin(
+        title: String = "PIN Authentication",
+        subtitle: String = "Enter your device PIN to access your private files",
         onSuccess: () -> Unit,
         onError: (String) -> Unit,
         onFailed: () -> Unit
@@ -51,10 +50,7 @@ class BiometricUtils(private val activity: FragmentActivity) {
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle(title)
             .setSubtitle(subtitle)
-            .setAllowedAuthenticators(
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                        BiometricManager.Authenticators.DEVICE_CREDENTIAL
-            )
+            .setAllowedAuthenticators(BiometricManager.Authenticators.DEVICE_CREDENTIAL)
             .build()
 
         biometricPrompt.authenticate(promptInfo)

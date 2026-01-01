@@ -2,4 +2,11 @@
 <resources>
 
     <style name="Theme.SmartCalculator" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.SmartCalculator.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#1E1E1E</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/smartcal</item>
+        <item name="windowSplashScreenAnimationDuration">1000</item>
+        <item name="postSplashScreenTheme">@style/Theme.SmartCalculator</item>
+    </style>
 </resources>

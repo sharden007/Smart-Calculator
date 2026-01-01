@@ -3,6 +3,9 @@ package com.example.smartcalculator.ui.gallery
 import android.app.Application
 import android.content.ContentResolver
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
@@ -67,11 +70,16 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     }
 
                     // Get file details
-                    val fileName = getFileName(contentResolver, uri) ?: "unknown"
+                    val fileName = getFileName(contentResolver, uri) ?: "unknown_file"
+                    val mimeType = contentResolver.getType(uri)
                     val fileType = when {
-                        contentResolver.getType(uri)?.startsWith("image") == true -> "image"
-                        contentResolver.getType(uri)?.startsWith("video") == true -> "video"
-                        else -> "unknown"
+                        mimeType?.startsWith("image") == true -> "image"
+                        mimeType?.startsWith("video") == true -> "video"
+                        mimeType?.startsWith("audio") == true -> "audio"
+                        mimeType?.contains("pdf") == true -> "pdf"
+                        mimeType?.contains("document") == true ||
+                        mimeType?.contains("text") == true -> "document"
+                        else -> "file"
                     }
 
                     // Encrypt the file
@@ -81,13 +89,17 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
                     )
 
                     if (encryptionUtils.encryptFile(tempFile, encryptedFile)) {
+                        // Generate and encrypt thumbnail
+                        val thumbnailPath = generateThumbnail(tempFile, fileType)
+
                         // Save to database
                         val encryptedFileEntity = EncryptedFile(
                             originalPath = uri.toString(),
                             encryptedPath = encryptedFile.absolutePath,
                             fileName = fileName,
                             fileType = fileType,
-                            vaultType = vaultType
+                            vaultType = vaultType,
+                            thumbnailPath = thumbnailPath
                         )
 
                         database.encryptedFileDao().insertFile(encryptedFileEntity)
@@ -155,5 +167,77 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         return fileName
+    }
+
+    private fun generateThumbnail(file: File, fileType: String): String? {
+        return try {
+            val bitmap = when (fileType) {
+                "image" -> {
+                    // Generate thumbnail for image
+                    val options = BitmapFactory.Options().apply {
+                        inJustDecodeBounds = true
+                    }
+                    BitmapFactory.decodeFile(file.absolutePath, options)
+
+                    val targetSize = 512
+                    options.inSampleSize = calculateInSampleSize(options, targetSize, targetSize)
+                    options.inJustDecodeBounds = false
+
+                    BitmapFactory.decodeFile(file.absolutePath, options)
+                }
+                "video" -> {
+                    // Generate thumbnail for video
+                    val retriever = MediaMetadataRetriever()
+                    retriever.setDataSource(file.absolutePath)
+                    val bitmap = retriever.getFrameAtTime(0)
+                    retriever.release()
+                    bitmap
+                }
+                else -> null
+            }
+
+            bitmap?.let {
+                // Save thumbnail
+                val thumbFile = File(encryptionUtils.getTempDir(), "thumb_${System.currentTimeMillis()}.jpg")
+                FileOutputStream(thumbFile).use { out ->
+                    it.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                }
+                it.recycle()
+
+                // Encrypt thumbnail
+                val encryptedThumb = File(
+                    encryptionUtils.getThumbnailDir(),
+                    "thumb_${System.currentTimeMillis()}"
+                )
+
+                if (encryptionUtils.encryptFile(thumbFile, encryptedThumb)) {
+                    thumbFile.delete()
+                    encryptedThumb.absolutePath
+                } else {
+                    thumbFile.delete()
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+        val height = options.outHeight
+        val width = options.outWidth
+        var inSampleSize = 1
+
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight = height / 2
+            val halfWidth = width / 2
+
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+
+        return inSampleSize
     }
 }

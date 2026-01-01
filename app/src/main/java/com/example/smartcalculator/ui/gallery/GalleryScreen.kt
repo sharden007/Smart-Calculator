@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,16 +16,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.example.smartcalculator.data.EncryptedFile
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -152,18 +155,70 @@ fun GalleryItem(
     onDelete: () -> Unit
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var thumbnailBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(file.id) {
+        if (file.fileType == "image" || file.fileType == "video") {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val encryptionUtils = com.example.smartcalculator.utils.EncryptionUtils(context)
+                    val thumbnailPath = file.thumbnailPath ?: file.encryptedPath
+                    val encryptedFile = java.io.File(thumbnailPath)
+                    val tempFile = java.io.File(encryptionUtils.getTempDir(), "thumb_${file.id}.jpg")
+
+                    if (encryptionUtils.decryptFile(encryptedFile, tempFile)) {
+                        val bitmap = android.graphics.BitmapFactory.decodeFile(tempFile.absolutePath)
+                        thumbnailBitmap = bitmap
+                        tempFile.delete()
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                } finally {
+                    isLoading = false
+                }
+            }
+        } else {
+            isLoading = false
+        }
+    }
 
     Box(
         modifier = Modifier
             .aspectRatio(1f)
             .clickable(onClick = onClick)
+            .background(Color(0xFF2D2D2D))
     ) {
-        AsyncImage(
-            model = file.thumbnailPath ?: file.encryptedPath,
-            contentDescription = file.fileName,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
+        when {
+            file.fileType == "image" || file.fileType == "video" -> {
+                thumbnailBitmap?.let { bitmap ->
+                    androidx.compose.foundation.Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = file.fileName,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } ?: if (isLoading) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = Color.White
+                        )
+                    }
+                } else {
+                    // Failed to load thumbnail
+                    GenericFileView(file)
+                }
+            }
+            else -> {
+                // Non-image/video files
+                GenericFileView(file)
+            }
+        }
 
         IconButton(
             onClick = { showDeleteDialog = true },
@@ -198,6 +253,44 @@ fun GalleryItem(
                     Text("Cancel")
                 }
             }
+        )
+    }
+}
+
+@Composable
+fun GenericFileView(file: EncryptedFile) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = when (file.fileType) {
+                "video" -> Icons.Default.VideoLibrary
+                else -> Icons.Default.Description
+            },
+            contentDescription = file.fileType,
+            tint = Color(0xFFFF9500),
+            modifier = Modifier.size(48.dp)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = file.fileName,
+            color = Color.White,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = file.fileType.uppercase(),
+            color = Color.Gray,
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
     }
 }

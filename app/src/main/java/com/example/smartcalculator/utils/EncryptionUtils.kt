@@ -138,4 +138,12 @@ class EncryptionUtils(private val context: Context) {
         }
         return dir
     }
+
+    fun getThumbnailDir(): File {
+        val dir = File(context.filesDir, ".thumbnails")
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        return dir
+    }
 }
